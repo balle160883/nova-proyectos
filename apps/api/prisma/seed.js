@@ -10,21 +10,13 @@ function hashPassword(password) {
 }
 
 async function main() {
-  console.log('🌱 Limpiando y re-sembrando base de datos Kore Suite con Proyectos Corporativos...');
+  const existingCount = await prisma.user.count();
+  if (existingCount > 0) {
+    console.log('ℹ️ Base de datos ya contiene datos guardados. Se preserva la información existente y no se sobrescribe.');
+    return;
+  }
 
-  // Wipe old data to guarantee full removal of CPO / Investigaciones data
-  await prisma.columnValue.deleteMany({});
-  await prisma.item.deleteMany({});
-  await prisma.group.deleteMany({});
-  await prisma.column.deleteMany({});
-  await prisma.automationLog.deleteMany({});
-  await prisma.automation.deleteMany({});
-  await prisma.meetingActionItem.deleteMany({});
-  await prisma.meeting.deleteMany({});
-  await prisma.board.deleteMany({});
-  await prisma.user.deleteMany({});
-  await prisma.team.deleteMany({});
-  await prisma.organization.deleteMany({});
+  console.log('🌱 Base de datos vacía. Sembrando datos iniciales...');
 
   // 1. Create Organization
   const org = await prisma.organization.create({
