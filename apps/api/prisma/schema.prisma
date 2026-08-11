@@ -1,0 +1,205 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  domain    String?
+  teams     Team[]
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Team {
+  id             String       @id @default(uuid())
+  name           String
+  description    String?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users          User[]
+  boards         Board[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model User {
+  id             String        @id @default(uuid())
+  azureId        String?       @unique
+  email          String        @unique
+  passwordHash   String?
+  name           String
+  avatarUrl      String?       @default("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256")
+  role           String        @default("MEMBER") // SUPERADMIN, ADMIN, MEMBER, GUEST
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  teamId         String?
+  team           Team?         @relation(fields: [teamId], references: [id])
+  createdBoards  Board[]       @relation("BoardAuthor")
+  createdItems   Item[]        @relation("ItemAuthor")
+  assignedItems  Item[]        @relation("ItemAssignee")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Board {
+  id          String       @id @default(uuid())
+  title       String
+  description String?
+  icon        String?      @default("layout")
+  isPublic    Boolean      @default(true)
+  teamId      String?
+  team        Team?        @relation(fields: [teamId], references: [id])
+  createdById String
+  createdBy   User         @relation("BoardAuthor", fields: [createdById], references: [id])
+  groups      Group[]
+  columns     Column[]
+  items       Item[]
+  automations Automation[]
+  meetings    Meeting[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([teamId])
+  @@index([createdById])
+}
+
+model Group {
+  id        String   @id @default(uuid())
+  title     String
+  color     String   @default("#579BFC")
+  position  Int      @default(0)
+  boardId   String
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  items     Item[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([boardId])
+}
+
+model Column {
+  id           String        @id @default(uuid())
+  title        String
+  type         String        // TEXT, NUMBER, STATUS, DATE, USER, FILE, FORMULA
+  width        Int           @default(160)
+  position     Int           @default(0)
+  settingsJson String?       // Store options for status (labels, colors) or formulas
+  boardId      String
+  board        Board         @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  values       ColumnValue[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([boardId])
+}
+
+model Item {
+  id           String        @id @default(uuid())
+  title        String
+  position     Int           @default(0)
+  groupId      String
+  group        Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  boardId      String
+  board        Board         @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  createdById  String
+  createdBy    User          @relation("ItemAuthor", fields: [createdById], references: [id])
+  assignedToId String?
+  assignedTo   User?         @relation("ItemAssignee", fields: [assignedToId], references: [id])
+  dueDate      DateTime?
+  status       String?       @default("Not Started")
+  priority     String?       @default("Media")
+  budget       Float?        @default(0)
+  timerSeconds Int?          @default(0)
+  attachments  String?       // JSON stringified array of attachments [{ id, name, url }]
+  comments     String?       // JSON stringified array of comments [{ id, text, userId, userName, userAvatar, createdAt }]
+  parentId     String?
+  parent       Item?         @relation("Subtasks", fields: [parentId], references: [id])
+  subtasks     Item[]        @relation("Subtasks")
+  columnValues ColumnValue[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([boardId])
+  @@index([groupId])
+  @@index([assignedToId])
+  @@index([createdById])
+  @@index([parentId])
+}
+
+model ColumnValue {
+  id          String   @id @default(uuid())
+  itemId      String
+  item        Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  columnId    String
+  column      Column   @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  textValue   String?
+  numberValue Float?
+  dateValue   DateTime?
+  jsonValue   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([itemId, columnId])
+}
+
+model Automation {
+  id            String          @id @default(uuid())
+  title         String
+  boardId       String
+  board         Board           @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  isEnabled     Boolean         @default(true)
+  triggerType   String
+  triggerConfig String?
+  conditions    String?
+  actions       String
+  logs          AutomationLog[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([boardId])
+}
+
+model AutomationLog {
+  id           String     @id @default(uuid())
+  automationId String
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  status       String
+  details      String?
+  executedAt   DateTime   @default(now())
+}
+
+model Meeting {
+  id              String              @id @default(uuid())
+  title           String
+  boardId         String
+  board           Board               @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  calendarEventId String?
+  startTime       DateTime
+  endTime         DateTime
+  summary         String?
+  meetingUrl      String?
+  actionItems     MeetingActionItem[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([boardId])
+}
+
+model MeetingActionItem {
+  id          String   @id @default(uuid())
+  meetingId   String
+  meeting     Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  itemId      String?
+  text        String
+  assigneeId  String?
+  isConverted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

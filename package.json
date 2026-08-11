@@ -1,0 +1,17 @@
+{
+  "name": "monday-m365-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --prefix apps/api run start:dev",
+    "dev:web": "npm --prefix apps/web run dev",
+    "build:api": "npm --prefix apps/api run build",
+    "build:web": "npm --prefix apps/web run build",
+    "prisma:generate": "npm --prefix apps/api run prisma:generate",
+    "prisma:push": "npm --prefix apps/api run prisma:push",
+    "prisma:seed": "npm --prefix apps/api run prisma:seed"
+  }
+}

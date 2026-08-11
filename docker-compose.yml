@@ -1,0 +1,81 @@
+name: monday-m365-platform
+
+networks:
+  monday_network:
+    driver: bridge
+
+volumes:
+  monday_pgdata:
+  monday_redisdata:
+
+services:
+  monday_postgres:
+    image: postgres:16-alpine
+    container_name: monday_postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: monday_user
+      POSTGRES_PASSWORD: monday_pass_2026
+      POSTGRES_DB: monday_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - monday_pgdata:/var/lib/postgresql/data
+    networks:
+      - monday_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monday_user -d monday_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  monday_redis:
+    image: redis:7-alpine
+    container_name: monday_redis_cache
+    restart: always
+    ports:
+      - "6380:6379"
+    volumes:
+      - monday_redisdata:/data
+    networks:
+      - monday_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  monday_api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: monday_nestjs_api
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://monday_user:monday_pass_2026@monday_postgres:5432/monday_db?schema=public
+      REDIS_URL: redis://monday_redis:6379
+      PORT: 3001
+      NODE_ENV: production
+      JWT_SECRET: monday_m365_jwt_secret_key_prod_2026
+    ports:
+      - "3001:3001"
+    depends_on:
+      monday_postgres:
+        condition: service_healthy
+      monday_redis:
+        condition: service_healthy
+    networks:
+      - monday_network
+
+  monday_web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: monday_react_web
+    restart: always
+    ports:
+      - "3002:80"
+    depends_on:
+      - monday_api
+    networks:
+      - monday_network

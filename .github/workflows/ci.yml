@@ -1,0 +1,39 @@
+name: Kore Suite M365 Monorepo CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Código Fuente
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar Dependencias de la Raíz y Workspaces
+        run: npm install
+
+      - name: Generar Cliente de Prisma (Database ORM)
+        run: npm --prefix apps/api run prisma:generate
+
+      - name: Verificar Compilación del Backend NestJS (API)
+        run: npm --prefix apps/api run build
+
+      - name: Ejecutar Pruebas Unitarias Backend (Jest)
+        run: npm --prefix apps/api test
+
+      - name: Verificar Compilación del Frontend React (Web)
+        run: npm --prefix apps/web run build
+
+      - name: Validar Estructura Docker Compose
+        run: docker compose config
