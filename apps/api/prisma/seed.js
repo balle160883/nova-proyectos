@@ -1,5 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const prisma = new PrismaClient();
 
@@ -9,299 +11,167 @@ function hashPassword(password) {
   return `${salt}:${derivedKey}`;
 }
 
-async function main() {
-  const existingCount = await prisma.user.count();
-  if (existingCount > 0) {
-    console.log('ℹ️ Base de datos ya contiene datos guardados. Se preserva la información existente y no se sobrescribe.');
-    return;
+// Helper to load file as base64 data url
+function getFileAttachment(filename, displayName) {
+  const possiblePaths = [
+    path.join('/app/Desarrollos', filename),
+    path.join(__dirname, '..', '..', 'Desarrollos', filename),
+    path.join(__dirname, '..', '..', '..', 'Desarrollos', filename),
+    path.join(process.cwd(), 'Desarrollos', filename),
+    path.join('F:\\monday-propio\\Desarrollos', filename),
+  ];
+
+  let filePath = possiblePaths.find((p) => fs.existsSync(p));
+  if (!filePath) {
+    return null;
   }
 
-  console.log('🌱 Base de datos vacía. Sembrando datos iniciales...');
+  try {
+    const fileBuffer = fs.readFileSync(filePath);
+    const base64Data = fileBuffer.toString('base64');
+    const sizeKb = Math.round(fileBuffer.length / 1024);
 
-  // 1. Create Organization
-  const org = await prisma.organization.create({
-    data: {
-      name: 'Corporativo Kore Suite',
-      domain: 'koresuite.com',
-    },
-  });
+    return {
+      id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: displayName || filename,
+      url: `data:application/pdf;base64,${base64Data}`,
+      size: `${sizeKb} KB`,
+    };
+  } catch (e) {
+    console.warn(`Error reading file ${filename}:`, e.message);
+    return null;
+  }
+}
 
-  // 2. Create Teams
-  const teamProyectos = await prisma.team.create({
-    data: {
-      name: 'Dirección de Gestión de Proyectos',
-      description: 'Coordinación estratégica, entregables y planeación corporativa',
-      organizationId: org.id,
-    },
-  });
+async function main() {
+  console.log('🌱 Inicializando / Actualizando base de datos corporativa con información 100% real...');
 
-  const teamSistemas = await prisma.team.create({
-    data: {
-      name: 'Equipo de Tecnología & Sistemas M365',
-      description: 'Desarrollo de software, automatizaciones e integración M365',
-      organizationId: org.id,
-    },
-  });
-
-  // 3. Create SuperAdmin User requested by user
-  const userSuperAdmin = await prisma.user.create({
-    data: {
-      email: 'ing.ballesteros16@gmail.com',
-      name: 'Ing. Ballesteros (SuperAdmin)',
-      passwordHash: hashPassword('Seguridad2026@'),
-      azureId: 'azure-user-ballesteros',
-      role: 'SUPERADMIN',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256',
-      organizationId: org.id,
-      teamId: teamProyectos.id,
-    },
-  });
-
-  const userDiego = await prisma.user.create({
-    data: {
-      email: 'diego@m365corp.com',
-      name: 'Diego Morales (Admin Proyectos)',
-      passwordHash: hashPassword('Seguridad2026@'),
-      azureId: 'azure-user-diego',
-      role: 'ADMIN',
-      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=256',
-      organizationId: org.id,
-      teamId: teamProyectos.id,
-    },
-  });
-
-  const userSofia = await prisma.user.create({
-    data: {
-      email: 'sofia.rodriguez@koresuite.com',
-      name: 'Ing. Sofía Rodríguez (Líder de Proyectos)',
-      passwordHash: hashPassword('Seguridad2026@'),
-      azureId: 'azure-user-sofia',
-      role: 'MEMBER',
-      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=256',
-      organizationId: org.id,
-      teamId: teamProyectos.id,
-    },
-  });
-
-  const userCarlos = await prisma.user.create({
-    data: {
-      email: 'carlos.mendoza@koresuite.com',
-      name: 'Lic. Carlos Mendoza (Analista de Procesos)',
-      passwordHash: hashPassword('Seguridad2026@'),
-      azureId: 'azure-user-carlos',
-      role: 'MEMBER',
-      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=256',
-      organizationId: org.id,
-      teamId: teamProyectos.id,
-    },
-  });
-
-  // ==========================================
-  // TABLERO 1: GESTIÓN DE PROYECTOS ESTRATÉGICOS Q3
-  // ==========================================
-  const boardProyectos = await prisma.board.create({
-    data: {
-      title: '💼 Gestión de Proyectos Estratégicos Q3',
-      description: 'Planificación, entregables corporativos y asignación de hitos operativos.',
-      icon: 'layout',
-      teamId: teamProyectos.id,
-      createdById: userSuperAdmin.id,
-      columns: {
-        create: [
-          { title: 'Proyecto / Entregable', type: 'TEXT', position: 0, width: 260 },
-          { title: 'Responsable', type: 'USER', position: 1, width: 180 },
-          { title: 'Estatus de Avance', type: 'STATUS', position: 2, width: 160, settingsJson: JSON.stringify({
-              options: [
-                { label: 'Not Started', color: '#C4C4C4' },
-                { label: 'In Progress', color: '#579BFC' },
-                { label: 'Blocked', color: '#E2445C' },
-                { label: 'Completed', color: '#00C875' },
-              ]
-            })
-          },
-          { title: 'Fecha Límite', type: 'DATE', position: 3, width: 160 },
-        ],
+  // 1. Organization
+  let org = await prisma.organization.findFirst();
+  if (!org) {
+    org = await prisma.organization.create({
+      data: {
+        name: 'Caja Popular Oblatos S.C. de A.P. de R.L. de C.V.',
+        domain: 'cajapopularoblatos.com.mx',
       },
-    },
-  });
+    });
+  }
 
-  // Grupos Proyectos
-  const groupPlanificacion = await prisma.group.create({
-    data: {
-      title: '📌 Fase 1: Planificación & Alcance',
-      color: '#579BFC',
-      position: 0,
-      boardId: boardProyectos.id,
-    },
-  });
-
-  const groupEjecucion = await prisma.group.create({
-    data: {
-      title: '🚀 Fase 2: Ejecución & Entregables',
-      color: '#A54EE1',
-      position: 1,
-      boardId: boardProyectos.id,
-    },
-  });
-
-  const groupCompletados = await prisma.group.create({
-    data: {
-      title: '✅ Fase 3: Hitos Completados',
-      color: '#00C875',
-      position: 2,
-      boardId: boardProyectos.id,
-    },
-  });
-
-  // Tareas Proyectos
-  await prisma.item.create({
-    data: {
-      title: 'Elaborar propuesta ejecutiva de transformación digital corporativa',
-      groupId: groupPlanificacion.id,
-      boardId: boardProyectos.id,
-      createdById: userSuperAdmin.id,
-      assignedToId: userSofia.id,
-      status: 'Not Started',
-      dueDate: new Date(Date.now() + 86400000 * 2),
-    },
-  });
-
-  await prisma.item.create({
-    data: {
-      title: 'Revisión presupuestal y matriz de riesgos de entregables Q3',
-      groupId: groupPlanificacion.id,
-      boardId: boardProyectos.id,
-      createdById: userSuperAdmin.id,
-      assignedToId: userCarlos.id,
-      status: 'Not Started',
-      dueDate: new Date(Date.now() + 86400000 * 3),
-    },
-  });
-
-  await prisma.item.create({
-    data: {
-      title: 'Implementación del plan de automatización de procesos internos',
-      groupId: groupEjecucion.id,
-      boardId: boardProyectos.id,
-      createdById: userSuperAdmin.id,
-      assignedToId: userSofia.id,
-      status: 'In Progress',
-      dueDate: new Date(Date.now() + 86400000 * 4),
-    },
-  });
-
-  await prisma.item.create({
-    data: {
-      title: 'Auditoría de cumplimiento de estándares de calidad corporativos',
-      groupId: groupEjecucion.id,
-      boardId: boardProyectos.id,
-      createdById: userSuperAdmin.id,
-      assignedToId: userCarlos.id,
-      status: 'Blocked',
-      dueDate: new Date(Date.now() + 86400000 * 1),
-    },
-  });
-
-  await prisma.item.create({
-    data: {
-      title: 'Aprobación final del manual de procedimientos operativos de proyectos',
-      groupId: groupCompletados.id,
-      boardId: boardProyectos.id,
-      createdById: userSuperAdmin.id,
-      assignedToId: userSofia.id,
-      status: 'Completed',
-      dueDate: new Date(Date.now() - 86400000 * 1),
-    },
-  });
-
-  // Automatización Proyectos
-  await prisma.automation.create({
-    data: {
-      title: '🚨 Notificar a Dirección si un entregable crítico se marca como BLOQUEADO',
-      boardId: boardProyectos.id,
-      triggerType: 'ITEM_STATUS_CHANGED',
-      conditions: JSON.stringify([{ field: 'status', operator: 'equals', value: 'Blocked' }]),
-      actions: JSON.stringify([
-        {
-          type: 'NOTIFY_TEAMS',
-          payload: {
-            channel: 'Alertas de Proyectos Kore Suite',
-            message: '🚨 ¡Atención! Un entregable crítico requiere revisión inmediata.',
-          },
-        },
-      ]),
-    },
-  });
-
-  // Reunión Proyectos
-  await prisma.meeting.create({
-    data: {
-      title: 'Junta de Coordinación y Avance de Proyectos Q3',
-      boardId: boardProyectos.id,
-      calendarEventId: 'outlook-evt-kore-101',
-      startTime: new Date(),
-      endTime: new Date(Date.now() + 3600000),
-      summary: 'Revisión semanal de hitos corporativos, avance de entregables y resolución de bloqueos.',
-      actionItems: {
-        create: [
-          { text: 'Finalizar propuesta ejecutiva para Comité Operativo', assigneeId: userSofia.id },
-          { text: 'Actualizar matriz de riesgo con el equipo de finanzas', assigneeId: userCarlos.id },
-        ],
+  // 2. Teams
+  let teamPMO = await prisma.team.findFirst({ where: { name: { contains: 'Proyectos' } } });
+  if (!teamPMO) {
+    teamPMO = await prisma.team.create({
+      data: {
+        name: 'Oficina de Gestión de Proyectos (PMO) & Dirección',
+        description: 'Coordinación estratégica, entregables corporativos y planeación',
+        organizationId: org.id,
       },
-    },
-  });
+    });
+  }
 
-  // ==========================================
-  // TABLERO 2: ROADMAP DE PLATAFORMA KORE SUITE
-  // ==========================================
-  const boardKore = await prisma.board.create({
-    data: {
-      title: '🚀 Lanzamiento Plataforma Kore Suite',
-      description: 'Seguimiento de arquitectura de software, integración con Entra ID y Microsoft Graph API.',
-      icon: 'layout',
-      teamId: teamSistemas.id,
-      createdById: userSuperAdmin.id,
-      columns: {
-        create: [
-          { title: 'Tarea / Módulo', type: 'TEXT', position: 0, width: 240 },
-          { title: 'Responsable', type: 'USER', position: 1, width: 160 },
-          { title: 'Estatus', type: 'STATUS', position: 2, width: 160, settingsJson: JSON.stringify({
-              options: [
-                { label: 'Not Started', color: '#C4C4C4' },
-                { label: 'In Progress', color: '#579BFC' },
-                { label: 'Blocked', color: '#E2445C' },
-                { label: 'Completed', color: '#00C875' },
-              ]
-            })
-          },
-          { title: 'Fecha Límite', type: 'DATE', position: 3, width: 160 },
-        ],
+  let teamSistemas = await prisma.team.findFirst({ where: { name: { contains: 'Tecnología' } } });
+  if (!teamSistemas) {
+    teamSistemas = await prisma.team.create({
+      data: {
+        name: 'Ingeniería de Software & Arquitectura de Sistemas',
+        description: 'Desarrollo de software, automatizaciones y arquitectura de microservicios',
+        organizationId: org.id,
       },
+    });
+  }
+
+  // 3. Users
+  let userSuperAdmin = await prisma.user.findFirst({ where: { role: 'SUPERADMIN' } });
+  if (!userSuperAdmin) {
+    userSuperAdmin = await prisma.user.create({
+      data: {
+        email: 'ing.ballesteros16@gmail.com',
+        name: 'Ing. Ballesteros (SuperAdmin)',
+        passwordHash: hashPassword('Seguridad2026@'),
+        azureId: 'azure-user-ballesteros',
+        role: 'SUPERADMIN',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256',
+        organizationId: org.id,
+        teamId: teamPMO.id,
+      },
+    });
+  }
+
+  let userDiego = await prisma.user.findFirst({ where: { email: { contains: 'diego' } } });
+  if (!userDiego) {
+    userDiego = await prisma.user.create({
+      data: {
+        email: 'diego@m365corp.com',
+        name: 'Diego Morales (Admin Proyectos)',
+        passwordHash: hashPassword('Seguridad2026@'),
+        azureId: 'azure-user-diego',
+        role: 'ADMIN',
+        avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=256',
+        organizationId: org.id,
+        teamId: teamPMO.id,
+      },
+    });
+  }
+
+  let userSofia = await prisma.user.findFirst({ where: { email: { contains: 'sofia' } } });
+  if (!userSofia) {
+    userSofia = await prisma.user.create({
+      data: {
+        email: 'sofia.rodriguez@koresuite.com',
+        name: 'Ing. Sofía Rodríguez (Líder de Proyectos)',
+        passwordHash: hashPassword('Seguridad2026@'),
+        azureId: 'azure-user-sofia',
+        role: 'MEMBER',
+        avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=256',
+        organizationId: org.id,
+        teamId: teamPMO.id,
+      },
+    });
+  }
+
+  let userCarlos = await prisma.user.findFirst({ where: { email: { contains: 'carlos' } } });
+  if (!userCarlos) {
+    userCarlos = await prisma.user.create({
+      data: {
+        email: 'carlos.mendoza@koresuite.com',
+        name: 'Lic. Carlos Mendoza (Analista de Procesos)',
+        passwordHash: hashPassword('Seguridad2026@'),
+        azureId: 'azure-user-carlos',
+        role: 'MEMBER',
+        avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=256',
+        organizationId: org.id,
+        teamId: teamPMO.id,
+      },
+    });
+  }
+
+  const adminId = userSuperAdmin.id;
+  const sofiaId = userSofia.id;
+  const diegoId = userDiego.id;
+  const carlosId = userCarlos.id;
+
+  // Eliminar cualquier tablero de prueba residual si existiera
+  const mockBoards = await prisma.board.findMany({
+    where: {
+      OR: [
+        { title: { contains: 'Gestión de Proyectos Estratégicos Q3' } },
+        { title: { contains: 'Lanzamiento Plataforma Kore Suite' } },
+      ],
     },
   });
+  for (const mb of mockBoards) {
+    await prisma.meetingActionItem.deleteMany({ where: { meeting: { boardId: mb.id } } });
+    await prisma.meeting.deleteMany({ where: { boardId: mb.id } });
+    await prisma.automationLog.deleteMany({ where: { automation: { boardId: mb.id } } });
+    await prisma.automation.deleteMany({ where: { boardId: mb.id } });
+    await prisma.columnValue.deleteMany({ where: { item: { boardId: mb.id } } });
+    await prisma.item.deleteMany({ where: { boardId: mb.id } });
+    await prisma.group.deleteMany({ where: { boardId: mb.id } });
+    await prisma.column.deleteMany({ where: { boardId: mb.id } });
+    await prisma.board.delete({ where: { id: mb.id } });
+  }
 
-  const groupKoreDev = await prisma.group.create({
-    data: {
-      title: 'Q3 — Backend & Arquitectura Core',
-      color: '#579BFC',
-      position: 0,
-      boardId: boardKore.id,
-    },
-  });
-
-  await prisma.item.create({
-    data: {
-      title: 'Despliegue de infraestructura en contenedores Docker y PostgreSQL',
-      groupId: groupKoreDev.id,
-      boardId: boardKore.id,
-      createdById: userSuperAdmin.id,
-      assignedToId: userDiego.id,
-      status: 'Completed',
-      dueDate: new Date(Date.now() + 86400000 * 2),
-    },
-  });
-
-  console.log('✅ Base de datos re-sembrada exitosamente con la marca e hitos de Kore Suite.');
+  console.log('✅ Base de datos verificada y limpia de datos de prueba.');
 }
 
 main()

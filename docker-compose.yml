@@ -59,6 +59,8 @@ services:
       JWT_SECRET: monday_m365_jwt_secret_key_prod_2026
     ports:
       - "3001:3001"
+    volumes:
+      - ./Desarrollos:/app/Desarrollos
     depends_on:
       monday_postgres:
         condition: service_healthy
