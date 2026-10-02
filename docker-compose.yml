@@ -29,12 +29,13 @@ services:
   monday_redis:
     image: redis:7-alpine
     restart: always
+    command: redis-server --requirepass "${REDIS_PASSWORD:-monday_redis_sec_2026}"
     volumes:
       - monday_redisdata:/data
     networks:
       - monday_network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-monday_redis_sec_2026}", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -45,11 +46,12 @@ services:
       dockerfile: apps/api/Dockerfile
     restart: always
     environment:
-      DATABASE_URL: postgresql://monday_user:monday_pass_2026@monday_postgres:5432/monday_db?schema=public
-      REDIS_URL: redis://monday_redis:6379
+      DATABASE_URL: postgresql://monday_user:${POSTGRES_PASSWORD:-monday_pass_2026}@monday_postgres:5432/monday_db?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD:-monday_redis_sec_2026}@monday_redis:6379
       PORT: 3001
       NODE_ENV: production
-      JWT_SECRET: monday_m365_jwt_secret_key_prod_2026
+      JWT_SECRET: ${JWT_SECRET:-monday_m365_jwt_secret_key_prod_2026}
+      ENABLE_SWAGGER: ${ENABLE_SWAGGER:-false}
     volumes:
       - ./Desarrollos:/app/Desarrollos
     depends_on:

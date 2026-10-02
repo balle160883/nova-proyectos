@@ -138,7 +138,14 @@ export class AuthService {
     this.failedAttempts.set(email, current);
   }
 
-  async handleEntraIdLogin(payload: { email: string; name: string; azureId?: string; avatarUrl?: string }) {
+  async handleEntraIdLogin(payload: { email: string; name: string; idToken?: string; azureId?: string; avatarUrl?: string }) {
+    // PROTECCION DE CIBERSEGURIDAD: Prevenir bypass de autenticacion y suplantacion de identidad
+    if (!payload.idToken || process.env.NODE_ENV === 'production') {
+      this.logger.warn(`SECURITY ALERT: Intento de inicio de sesion SSO Entra ID no verificado para ${payload.email}. Rechazado.`);
+      throw new UnauthorizedException(
+        'El inicio de sesion SSO via Microsoft Entra ID requiere validacion criptografica del id_token firmado por Microsoft Azure. Por favor utilice inicio de sesion con correo y contrasena.',
+      );
+    }
     this.logger.log(`Processing Entra ID SSO login for email: ${payload.email}`);
 
     let user = await this.prisma.user.findUnique({

@@ -8,12 +8,41 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
-  // Increase payload size limit to 50MB for uploading base64 profile pictures and attachments
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ limit: '50mb', extended: true }));
+  // 1. Limite de tamano de payload controlado (15MB) para evitar DoS por memoria
+  app.use(json({ limit: '15mb' }));
+  app.use(urlencoded({ limit: '15mb', extended: true }));
+
+  // 2. Cabeceras de ciberseguridad HTTP (Defense-in-depth)
+  app.use((_req: any, res: any, next: any) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.removeHeader('X-Powered-By');
+    next();
+  });
+
+  // 3. Politica de CORS restringida a origenes autorizados
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+    : [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:3002',
+        'http://2.24.81.205:3000',
+        'http://2.24.81.205:3002',
+      ];
 
   app.enableCors({
-    origin: '*',
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        callback(null, true);
+      } else {
+        logger.warn(`CORS BLOQUEADO: Origen no autorizado intentando conectar: ${origin}`);
+        callback(new Error('Acceso no permitido por politica de seguridad CORS'), false);
+      }
+    },
     credentials: true,
   });
 
@@ -21,34 +50,40 @@ async function bootstrap() {
     new ValidationPipe({
       whitelist: true,
       transform: true,
-      forbidNonWhitelisted: false,
+      forbidNonWhitelisted: true,
     }),
   );
 
-  const config = new DocumentBuilder()
-    .setTitle('Plataforma Kore Suite M365 API')
-    .setDescription(
-      'API REST y WebSockets en tiempo real para la plataforma Kore Suite. Incluye autenticación JWT, cifrado scrypt, integración con Microsoft 365 (Graph API & Entra ID), PostgreSQL y Redis.',
-    )
-    .setVersion('1.0.0')
-    .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
-    .addTag('health', 'Endpoints de diagnóstico y monitoreo de salud del sistema')
-    .addTag('auth', 'Autenticación, inicio de sesión SSO Entra ID y gestión de usuarios')
-    .addTag('boards', 'Gestión de tableros, columnas, grupos e ítems')
-    .addTag('automations', 'Reglas y motor de automatizaciones')
-    .addTag('meetings', 'Gestión de minutas, acuerdos y reuniones de equipo')
-    .addTag('microsoft-graph', 'Integración nativa con Microsoft Outlook, Teams y SharePoint')
-    .build();
+  // 4. Swagger UI: Deshabilitado en produccion por defecto para evitar reconnaissance
+  const enableSwagger = process.env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true';
+  if (enableSwagger) {
+    const config = new DocumentBuilder()
+      .setTitle('Plataforma Kore Suite M365 API')
+      .setDescription(
+        'API REST y WebSockets en tiempo real para la plataforma Kore Suite. Incluye autenticacion JWT, cifrado scrypt, integracion con Microsoft 365, PostgreSQL y Redis.',
+      )
+      .setVersion('1.0.0')
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
+      .addTag('health', 'Endpoints de diagnostico y monitoreo de salud del sistema')
+      .addTag('auth', 'Autenticacion y gestion de usuarios')
+      .addTag('boards', 'Gestion de tableros, columnas, grupos e items')
+      .addTag('automations', 'Reglas y motor de automatizaciones')
+      .addTag('meetings', 'Gestion de minutas, acuerdos y reuniones de equipo')
+      .addTag('microsoft-graph', 'Integracion nativa con Microsoft Outlook, Teams y SharePoint')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    customSiteTitle: 'Kore Suite — Documentación Oficial de API',
-  });
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document, {
+      customSiteTitle: 'Kore Suite — Documentacion Oficial de API',
+    });
+    logger.log(`📄 Documentacion Swagger disponible en: http://localhost:${process.env.PORT || 3001}/api/docs`);
+  } else {
+    logger.log('🔒 Swagger UI deshabilitado en produccion por politica de endurecimiento (ENABLE_SWAGGER=false).');
+  }
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
   logger.log(`🚀 API Servidor corriendo en: http://localhost:${port}`);
-  logger.log(`📄 Documentación Swagger disponible en: http://localhost:${port}/api/docs`);
 }
 
 bootstrap();
